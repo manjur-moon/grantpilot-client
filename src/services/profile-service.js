@@ -1,0 +1,1 @@
+import {apiClient} from "@/lib/api-client";export const getProfile=()=>apiClient("/api/v1/profile/me").then(x=>x.data);export const updateProfile=(body)=>apiClient("/api/v1/profile/me",{method:"PATCH",body}).then(x=>x.data);

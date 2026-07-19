@@ -1,0 +1,1 @@
+import {apiClient} from "@/lib/api-client";export const listRecommendations=()=>apiClient("/api/v1/recommendations").then(x=>x.data);export const generateRecommendations=()=>apiClient("/api/v1/recommendations/generate",{method:"POST"}).then(x=>x.data);
