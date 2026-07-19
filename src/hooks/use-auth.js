@@ -1,0 +1,1 @@
+"use client"; import { authClient } from "@/lib/auth-client"; export const useAuth=()=>{const {data,isPending,error,refetch}=authClient.useSession();const user=data?.user;return {session:data,user,isLoading:isPending,error,refetch,isAuthenticated:!!user,role:user?.role||"user",isAdmin:user?.role==="admin"};};

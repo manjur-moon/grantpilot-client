@@ -1,0 +1,1 @@
+"use client";import {useQuery,useMutation,useQueryClient} from "@tanstack/react-query";export const useApiQuery=(key,fn,options={})=>useQuery({queryKey:key,queryFn:fn,...options});export const useApiMutation=(fn,keys=[])=>{const q=useQueryClient();return useMutation({mutationFn:fn,onSuccess:()=>keys.forEach(k=>q.invalidateQueries({queryKey:k}))});};
