@@ -1,0 +1,2 @@
+const backend=(process.env.API_SERVER_URL||"http://localhost:5000").replace(/\/$/,"");
+const nextConfig={images:{remotePatterns:[{protocol:"https",hostname:"res.cloudinary.com"},{protocol:"https",hostname:"images.unsplash.com"},{protocol:"https",hostname:"example.com"}]},async rewrites(){return [{source:"/api/auth/:path*",destination:`${backend}/api/auth/:path*`},{source:"/api/v1/:path*",destination:`${backend}/api/v1/:path*`}];}};export default nextConfig;
