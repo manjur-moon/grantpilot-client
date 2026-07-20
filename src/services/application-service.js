@@ -1,1 +1,86 @@
-import {apiClient} from "@/lib/api-client";export const getApplications=()=>apiClient("/api/v1/applications").then(x=>x.data);export const getApplication=(id)=>apiClient(`/api/v1/applications/${id}`).then(x=>x.data);export const createApplication=(opportunityId)=>apiClient("/api/v1/applications",{method:"POST",body:{opportunityId}}).then(x=>x.data);export const updateApplication=(id,body)=>apiClient(`/api/v1/applications/${id}`,{method:"PATCH",body}).then(x=>x.data);export const updateStatus=(id,status)=>apiClient(`/api/v1/applications/${id}/status`,{method:"PATCH",body:{status}}).then(x=>x.data);export const createTask=(id,body)=>apiClient(`/api/v1/applications/${id}/tasks`,{method:"POST",body}).then(x=>x.data);export const updateTask=(id,taskId,body)=>apiClient(`/api/v1/applications/${id}/tasks/${taskId}`,{method:"PATCH",body}).then(x=>x.data);export const generateStrategy=(id)=>apiClient(`/api/v1/applications/${id}/strategy`,{method:"POST"}).then(x=>x.data);
+import { apiClient } from "@/lib/api-client";
+
+export const getApplications = ({ signal } = {}) =>
+  apiClient("/api/v1/applications", {
+    signal,
+  }).then((response) => response.data);
+
+export const getApplication = (
+  applicationId,
+  { signal } = {},
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}`,
+    {
+      signal,
+    },
+  ).then((response) => response.data);
+
+export const createApplication = (opportunityId) =>
+  apiClient("/api/v1/applications", {
+    method: "POST",
+    body: {
+      opportunityId,
+    },
+  }).then((response) => response.data);
+
+export const updateApplication = (
+  applicationId,
+  body,
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}`,
+    {
+      method: "PATCH",
+      body,
+    },
+  ).then((response) => response.data);
+
+export const updateStatus = (
+  applicationId,
+  status,
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}/status`,
+    {
+      method: "PATCH",
+      body: {
+        status,
+      },
+    },
+  ).then((response) => response.data);
+
+export const createTask = (
+  applicationId,
+  body,
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}/tasks`,
+    {
+      method: "POST",
+      body,
+    },
+  ).then((response) => response.data);
+
+export const updateTask = (
+  applicationId,
+  taskId,
+  body,
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}/tasks/${taskId}`,
+    {
+      method: "PATCH",
+      body,
+    },
+  ).then((response) => response.data);
+
+export const generateStrategy = (
+  applicationId,
+) =>
+  apiClient(
+    `/api/v1/applications/${applicationId}/strategy`,
+    {
+      method: "POST",
+    },
+  ).then((response) => response.data);
