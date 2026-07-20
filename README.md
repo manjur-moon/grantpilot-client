@@ -11,12 +11,11 @@
 [![Better Auth](https://img.shields.io/badge/Auth-Better_Auth-111827)](https://www.better-auth.com/)
 [![Recharts](https://img.shields.io/badge/Charts-Recharts-22B5BF)](https://recharts.org/)
 
-[Live Website](https://grantpilot-client-six.vercel.app) · [Server API](https://grantpilot-server.onrender.com) · [Client Repository](https://github.com/YOUR_GITHUB_USERNAME/YOUR_CLIENT_REPOSITORY) · [Server Repository](https://github.com/YOUR_GITHUB_USERNAME/YOUR_SERVER_REPOSITORY)
+[Live Website](https://grantpilot-client-six.vercel.app) · [Server API](https://grantpilot-server.onrender.com) · 
 
 </div>
 
-> [!IMPORTANT]
-> Replace every `YOUR_*` placeholder and add real screenshots before final submission.
+
 
 ---
 
