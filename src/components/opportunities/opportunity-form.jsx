@@ -1,677 +1,816 @@
 "use client";
 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  RotateCcw,
+  Search,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { ImagePlus, LoaderCircle, Save, UploadCloud, X } from "lucide-react";
 
+import OpportunityCard from "@/components/opportunity-card";
 import {
   educationLevels,
   fundingTypes,
   opportunityCategories,
+  opportunitySortOptions,
 } from "@/constants/opportunity-options";
-import { uploadImages } from "@/services/opportunity-service";
+import {
+  getOpportunities,
+  getOpportunityFilterOptions,
+} from "@/services/opportunity-service";
 
-const inputClassName =
-  "min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
-const textareaClassName =
-  "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm leading-6 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
-const labelClassName = "mb-2 block text-sm font-semibold text-slate-700";
-
-const splitValues = (value = "") =>
-  String(value)
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const joinValues = (values = []) => (Array.isArray(values) ? values.join("\n") : "");
-
-const dateInputValue = (value) => {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+const defaultFilters = {
+  search: "",
+  category: "",
+  educationLevel: "",
+  fundingType: "",
+  country: "",
+  nationality: "",
+  fieldOfStudy: "",
+  deadlineTo: "",
+  minFunding: "",
+  maxFunding: "",
+  sort: "deadline-nearest",
+  page: 1,
+  limit: 12,
 };
 
-const createFormState = (opportunity) => ({
-  title: opportunity?.title || "",
-  providerName: opportunity?.providerName || "",
-  providerLogo: opportunity?.providerLogo || "",
-  shortDescription: opportunity?.shortDescription || "",
-  fullDescription: opportunity?.fullDescription || "",
-  category: opportunity?.category || "graduate-scholarship",
-  educationLevels: opportunity?.educationLevels || ["masters"],
-  fieldsOfStudy: joinValues(opportunity?.fieldsOfStudy),
-  fundingType: opportunity?.funding?.type || "fully-funded",
-  fundingAmount: opportunity?.funding?.amount ?? "",
-  fundingCurrency: opportunity?.funding?.currency || "USD",
-  fundingCoverage: joinValues(opportunity?.funding?.coverage),
-  fundingDescription: opportunity?.funding?.description || "",
-  applicationOpenDate: dateInputValue(opportunity?.applicationOpenDate),
-  deadline: dateInputValue(opportunity?.deadline),
-  eligibleCountries: joinValues(opportunity?.eligibleCountries),
-  eligibleNationalities: joinValues(opportunity?.eligibleNationalities),
-  minimumGpa: opportunity?.minimumGpa ?? "",
-  gpaScale: opportunity?.gpaScale ?? "",
-  minimumAge: opportunity?.minimumAge ?? "",
-  maximumAge: opportunity?.maximumAge ?? "",
-  requirements: joinValues(opportunity?.requirements),
-  requiredDocuments: joinValues(opportunity?.requiredDocuments),
-  benefits: joinValues(opportunity?.benefits),
-  applicationSteps: joinValues(opportunity?.applicationSteps),
-  officialSourceUrl: opportunity?.officialSourceUrl || "",
-  applicationUrl: opportunity?.applicationUrl || "",
-});
+const inputClassName =
+  "min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100";
 
-const nullableNumber = (value) => (value === "" ? null : Number(value));
+const labelClassName =
+  "mb-2 block text-xs font-bold uppercase tracking-[0.08em] text-slate-500";
 
-function Section({ title, description, children }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <h2 className="text-lg font-bold text-slate-950">{title}</h2>
-      {description ? (
-        <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
-      ) : null}
-      <div className="mt-6">{children}</div>
-    </section>
-  );
-}
+export default function OpportunitiesPage() {
+  const [draftFilters, setDraftFilters] =
+    useState(defaultFilters);
 
-export default function OpportunityForm({
-  initialOpportunity = null,
-  onSubmit,
-  submitLabel = "Submit opportunity",
-}) {
-  const [form, setForm] = useState(() => createFormState(initialOpportunity));
-  const [coverFile, setCoverFile] = useState(null);
-  const [galleryFiles, setGalleryFiles] = useState([]);
-  const [coverPreview, setCoverPreview] = useState(initialOpportunity?.coverImage || "");
-  const [savedGallery, setSavedGallery] = useState(() =>
-    (initialOpportunity?.images || []).map((url, index) => ({
-      url,
-      publicId: initialOpportunity?.imagePublicIds?.[index] || "",
-    }))
-  );
-  const [statusMessage, setStatusMessage] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [appliedFilters, setAppliedFilters] =
+    useState(defaultFilters);
+
+  const [options, setOptions] = useState({
+    countries: [],
+    nationalities: [],
+    fieldsOfStudy: [],
+  });
+
+  const [data, setData] = useState([]);
+  const [meta, setMeta] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
-    setForm(createFormState(initialOpportunity));
-    setCoverFile(null);
-    setGalleryFiles([]);
-    setCoverPreview(initialOpportunity?.coverImage || "");
-    setSavedGallery(
-      (initialOpportunity?.images || []).map((url, index) => ({
-        url,
-        publicId: initialOpportunity?.imagePublicIds?.[index] || "",
-      }))
+    const controller = new AbortController();
+
+    getOpportunityFilterOptions({
+      signal: controller.signal,
+    })
+      .then((filterOptions) => {
+        setOptions(
+          filterOptions || {
+            countries: [],
+            nationalities: [],
+            fieldsOfStudy: [],
+          },
+        );
+      })
+      .catch(() => {});
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadOpportunities = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const response = await getOpportunities(
+          appliedFilters,
+          controller.signal,
+        );
+
+        setData(response.data || []);
+        setMeta(response.meta || {});
+      } catch (requestError) {
+        if (requestError.name !== "AbortError") {
+          setError(
+            requestError.message ||
+              "Opportunities could not be loaded.",
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOpportunities();
+
+    return () => controller.abort();
+  }, [appliedFilters]);
+
+  const activeFilterCount = useMemo(() => {
+    const ignoredFields = new Set([
+      "page",
+      "limit",
+      "sort",
+    ]);
+
+    return Object.entries(appliedFilters).filter(
+      ([field, value]) =>
+        !ignoredFields.has(field) &&
+        value !== "" &&
+        value !== null &&
+        value !== undefined,
+    ).length;
+  }, [appliedFilters]);
+
+  const paginationItems = useMemo(() => {
+    const totalPages = Number(meta.totalPages) || 0;
+    const currentPage = Number(meta.page) || 1;
+
+    if (totalPages <= 7) {
+      return Array.from(
+        { length: totalPages },
+        (_, index) => index + 1,
+      );
+    }
+
+    const pages = [1];
+
+    if (currentPage > 4) {
+      pages.push("start-ellipsis");
+    }
+
+    const startPage = Math.max(2, currentPage - 1);
+    const endPage = Math.min(
+      totalPages - 1,
+      currentPage + 1,
     );
-  }, [initialOpportunity]);
 
-  useEffect(() => {
-    if (!coverFile) return undefined;
-    const objectUrl = URL.createObjectURL(coverFile);
-    setCoverPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [coverFile]);
+    for (
+      let page = startPage;
+      page <= endPage;
+      page += 1
+    ) {
+      pages.push(page);
+    }
 
-  const galleryPreviews = useMemo(
-    () =>
-      galleryFiles.map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-      })),
-    [galleryFiles]
-  );
+    if (currentPage < totalPages - 3) {
+      pages.push("end-ellipsis");
+    }
 
-  useEffect(
-    () => () => galleryPreviews.forEach((item) => URL.revokeObjectURL(item.url)),
-    [galleryPreviews]
-  );
+    pages.push(totalPages);
 
-  const updateField = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }));
+    return pages;
+  }, [meta.page, meta.totalPages]);
+
+  const updateDraftFilter = (field, value) => {
+    setDraftFilters((current) => ({
+      ...current,
+      [field]: value,
+    }));
   };
 
-  const toggleEducationLevel = (level) => {
-    setForm((current) => {
-      const exists = current.educationLevels.includes(level);
-      const nextLevels = exists
-        ? current.educationLevels.filter((item) => item !== level)
-        : [...current.educationLevels, level];
+  const applyFilters = (event) => {
+    event.preventDefault();
 
-      return {
-        ...current,
-        educationLevels: nextLevels.length > 0 ? nextLevels : current.educationLevels,
-      };
+    setAppliedFilters({
+      ...draftFilters,
+      search: draftFilters.search.trim(),
+      page: 1,
+    });
+
+    setFiltersOpen(false);
+  };
+
+  const resetFilters = () => {
+    setDraftFilters(defaultFilters);
+    setAppliedFilters(defaultFilters);
+    setFiltersOpen(false);
+  };
+
+  const changePage = (page) => {
+    setDraftFilters((current) => ({
+      ...current,
+      page,
+    }));
+
+    setAppliedFilters((current) => ({
+      ...current,
+      page,
+    }));
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
     });
   };
 
-  const handleGallerySelection = (event) => {
-    const files = Array.from(event.target.files || []);
-    const availableSlots = Math.max(5 - savedGallery.length - galleryFiles.length, 0);
+  const changeSort = (sort) => {
+    setDraftFilters((current) => ({
+      ...current,
+      sort,
+      page: 1,
+    }));
 
-    if (availableSlots > 0) {
-      setGalleryFiles((current) => [...current, ...files.slice(0, availableSlots)]);
-    }
-
-    event.target.value = "";
-  };
-
-  const removeNewGalleryFile = (indexToRemove) => {
-    setGalleryFiles((current) =>
-      current.filter((_, index) => index !== indexToRemove)
-    );
-  };
-
-  const submitForm = async (event) => {
-    event.preventDefault();
-    setStatusMessage("");
-    setSubmitting(true);
-
-    try {
-      let coverAsset = initialOpportunity?.coverImage
-        ? {
-            url: initialOpportunity.coverImage,
-            publicId: initialOpportunity.coverImagePublicId || "",
-          }
-        : null;
-
-      if (coverFile) {
-        const uploaded = await uploadImages([coverFile]);
-        coverAsset = uploaded[0];
-      }
-
-      if (!coverAsset) {
-        throw new Error("A cover image is required.");
-      }
-
-      let uploadedGallery = [];
-      if (galleryFiles.length > 0) {
-        uploadedGallery = await uploadImages(galleryFiles);
-      }
-
-      const imageAssets = [...savedGallery, ...uploadedGallery].slice(0, 5);
-
-      const payload = {
-        title: form.title.trim(),
-        providerName: form.providerName.trim(),
-        providerLogo: form.providerLogo.trim(),
-        coverAsset: {
-          url: coverAsset.url,
-          publicId: coverAsset.publicId || "",
-        },
-        imageAssets: imageAssets.map((asset) => ({
-          url: asset.url,
-          publicId: asset.publicId || "",
-        })),
-        shortDescription: form.shortDescription.trim(),
-        fullDescription: form.fullDescription.trim(),
-        category: form.category,
-        educationLevels: form.educationLevels,
-        fieldsOfStudy: splitValues(form.fieldsOfStudy),
-        funding: {
-          type: form.fundingType,
-          amount: Number(form.fundingAmount || 0),
-          currency: form.fundingCurrency.trim().toUpperCase() || "USD",
-          coverage: splitValues(form.fundingCoverage),
-          description: form.fundingDescription.trim(),
-        },
-        applicationOpenDate: form.applicationOpenDate || null,
-        deadline: form.deadline,
-        eligibleCountries: splitValues(form.eligibleCountries),
-        eligibleNationalities: splitValues(form.eligibleNationalities),
-        minimumGpa: nullableNumber(form.minimumGpa),
-        gpaScale: nullableNumber(form.gpaScale),
-        minimumAge: nullableNumber(form.minimumAge),
-        maximumAge: nullableNumber(form.maximumAge),
-        requirements: splitValues(form.requirements),
-        requiredDocuments: splitValues(form.requiredDocuments),
-        benefits: splitValues(form.benefits),
-        applicationSteps: splitValues(form.applicationSteps),
-        officialSourceUrl: form.officialSourceUrl.trim(),
-        applicationUrl: form.applicationUrl.trim(),
-      };
-
-      await onSubmit(payload);
-      setStatusMessage("Opportunity saved successfully and submitted for admin review.");
-    } catch (error) {
-      setStatusMessage(error.message || "The opportunity could not be saved.");
-    } finally {
-      setSubmitting(false);
-    }
+    setAppliedFilters((current) => ({
+      ...current,
+      sort,
+      page: 1,
+    }));
   };
 
   return (
-    <form onSubmit={submitForm} className="space-y-6">
-      <Section
-        title="Basic information"
-        description="Use the official opportunity title and provider information."
-      >
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="md:col-span-2">
-            <label className={labelClassName}>Opportunity title</label>
-            <input
-              required
-              value={form.title}
-              onChange={(event) => updateField("title", event.target.value)}
-              className={inputClassName}
-              placeholder="Example: Global Research Fellowship 2027"
-            />
-          </div>
+    <main className="min-h-screen bg-slate-50/70 pb-16">
+      {/* Page heading */}
+      <section className="border-b border-slate-200 bg-white">
+        <div className="container-page py-8 sm:py-10">
+          <div className="relative isolate overflow-hidden rounded-3xl bg-slate-950 px-6 py-9 text-white sm:px-9 lg:px-12">
+            <div className="pointer-events-none absolute -right-24 -top-28 -z-10 h-80 w-80 rounded-full bg-indigo-600/30 blur-3xl" />
 
-          <div>
-            <label className={labelClassName}>Provider name</label>
-            <input
-              required
-              value={form.providerName}
-              onChange={(event) => updateField("providerName", event.target.value)}
-              className={inputClassName}
-              placeholder="University or foundation"
-            />
-          </div>
+            <div className="pointer-events-none absolute -bottom-32 left-1/3 -z-10 h-72 w-72 rounded-full bg-violet-700/25 blur-3xl" />
 
-          <div>
-            <label className={labelClassName}>Provider logo URL</label>
-            <input
-              type="url"
-              value={form.providerLogo}
-              onChange={(event) => updateField("providerLogo", event.target.value)}
-              className={inputClassName}
-              placeholder="https://..."
-            />
-          </div>
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
+              <div className="max-w-3xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-4 py-2 text-sm font-bold text-indigo-200">
+                  <Sparkles className="h-4 w-4" />
+                  Verified funding opportunities
+                </div>
 
-          <div>
-            <label className={labelClassName}>Category</label>
-            <select
-              value={form.category}
-              onChange={(event) => updateField("category", event.target.value)}
-              className={inputClassName}
+                <h1 className="mt-5 text-3xl font-black tracking-tight sm:text-4xl lg:text-5xl">
+                  Explore opportunities built around your goals
+                </h1>
+
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+                  Search scholarships, fellowships,
+                  competitions and research grants using
+                  eligibility, education, funding and deadline
+                  filters.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:flex">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur">
+                  <p className="text-2xl font-black">
+                    {loading ? "—" : meta.total || 0}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Opportunities
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-5 py-4 backdrop-blur">
+                  <p className="text-2xl font-black">
+                    {activeFilterCount}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-400">
+                    Active filters
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="container-page pt-7">
+        {/* Mobile filter trigger */}
+        <button
+          type="button"
+          onClick={() =>
+            setFiltersOpen((current) => !current)
+          }
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-bold text-slate-700 shadow-sm lg:hidden"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+
+          {filtersOpen ? "Hide filters" : "Show filters"}
+
+          {activeFilterCount > 0 ? (
+            <span className="flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-600 px-2 text-xs text-white">
+              {activeFilterCount}
+            </span>
+          ) : null}
+        </button>
+
+        <div className="mt-5 grid items-start gap-6 lg:mt-0 lg:grid-cols-[300px_minmax(0,1fr)]">
+          {/* Filters */}
+          <aside
+            className={`${
+              filtersOpen ? "block" : "hidden"
+            } lg:block`}
+          >
+            <form
+              onSubmit={applyFilters}
+              className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-28 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto"
             >
-              {opportunityCategories.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700">
+                      <Filter className="h-4 w-4" />
+                    </span>
 
-          <div>
-            <label className={labelClassName}>Fields of study</label>
-            <textarea
-              rows={3}
-              value={form.fieldsOfStudy}
-              onChange={(event) => updateField("fieldsOfStudy", event.target.value)}
-              className={textareaClassName}
-              placeholder={"Computer Science\nArtificial Intelligence"}
-            />
-          </div>
+                    <h2 className="font-bold text-slate-950">
+                      Filter opportunities
+                    </h2>
+                  </div>
 
-          <div className="md:col-span-2">
-            <label className={labelClassName}>Eligible education levels</label>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {educationLevels.map((item) => (
-                <label
-                  key={item.value}
-                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 px-4 py-3 text-sm"
+                  <p className="mt-2 text-xs leading-5 text-slate-500">
+                    Refine results using your eligibility and
+                    funding preferences.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700"
                 >
-                  <input
-                    type="checkbox"
-                    checked={form.educationLevels.includes(item.value)}
-                    onChange={() => toggleEducationLevel(item.value)}
-                    className="h-4 w-4"
-                  />
-                  {item.label}
-                </label>
-              ))}
-            </div>
-          </div>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Reset
+                </button>
+              </div>
 
-          <div className="md:col-span-2">
-            <label className={labelClassName}>Short description</label>
-            <textarea
-              required
-              rows={3}
-              maxLength={500}
-              value={form.shortDescription}
-              onChange={(event) => updateField("shortDescription", event.target.value)}
-              className={textareaClassName}
-              placeholder="A concise summary shown on opportunity cards."
-            />
-          </div>
+              <div className="mt-6 space-y-5">
+                <div>
+                  <label
+                    htmlFor="opportunity-search"
+                    className={labelClassName}
+                  >
+                    Search
+                  </label>
 
-          <div className="md:col-span-2">
-            <label className={labelClassName}>Full description</label>
-            <textarea
-              required
-              rows={9}
-              value={form.fullDescription}
-              onChange={(event) => updateField("fullDescription", event.target.value)}
-              className={textareaClassName}
-              placeholder="Provide complete official details."
-            />
-          </div>
-        </div>
-      </Section>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 
-      <Section title="Funding" description="Enter the published funding amount and coverage.">
-        <div className="grid gap-5 md:grid-cols-3">
-          <div>
-            <label className={labelClassName}>Funding type</label>
-            <select
-              value={form.fundingType}
-              onChange={(event) => updateField("fundingType", event.target.value)}
-              className={inputClassName}
-            >
-              {fundingTypes.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
+                    <input
+                      id="opportunity-search"
+                      value={draftFilters.search}
+                      onChange={(event) =>
+                        updateDraftFilter(
+                          "search",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Title, provider or field"
+                      className={`${inputClassName} pl-10`}
+                    />
+                  </div>
+                </div>
 
-          <div>
-            <label className={labelClassName}>Amount</label>
-            <input
-              type="number"
-              min="0"
-              value={form.fundingAmount}
-              onChange={(event) => updateField("fundingAmount", event.target.value)}
-              className={inputClassName}
-              placeholder="25000"
-            />
-          </div>
+                <div>
+                  <label className={labelClassName}>
+                    Category
+                  </label>
 
-          <div>
-            <label className={labelClassName}>Currency</label>
-            <input
-              maxLength={3}
-              value={form.fundingCurrency}
-              onChange={(event) => updateField("fundingCurrency", event.target.value)}
-              className={inputClassName}
-              placeholder="USD"
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Coverage</label>
-            <textarea
-              rows={4}
-              value={form.fundingCoverage}
-              onChange={(event) => updateField("fundingCoverage", event.target.value)}
-              className={textareaClassName}
-              placeholder={"Tuition fee\nLiving stipend\nTravel allowance"}
-            />
-          </div>
-
-          <div className="md:col-span-2">
-            <label className={labelClassName}>Funding description</label>
-            <textarea
-              rows={4}
-              value={form.fundingDescription}
-              onChange={(event) => updateField("fundingDescription", event.target.value)}
-              className={textareaClassName}
-              placeholder="Explain the published funding package."
-            />
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Eligibility and dates">
-        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <label className={labelClassName}>Application opens</label>
-            <input
-              type="date"
-              value={form.applicationOpenDate}
-              onChange={(event) => updateField("applicationOpenDate", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Deadline</label>
-            <input
-              required
-              type="date"
-              value={form.deadline}
-              onChange={(event) => updateField("deadline", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Minimum GPA</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.minimumGpa}
-              onChange={(event) => updateField("minimumGpa", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>GPA scale</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.gpaScale}
-              onChange={(event) => updateField("gpaScale", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Minimum age</label>
-            <input
-              type="number"
-              min="0"
-              value={form.minimumAge}
-              onChange={(event) => updateField("minimumAge", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Maximum age</label>
-            <input
-              type="number"
-              min="0"
-              value={form.maximumAge}
-              onChange={(event) => updateField("maximumAge", event.target.value)}
-              className={inputClassName}
-            />
-          </div>
-
-          <div className="lg:col-span-2">
-            <label className={labelClassName}>Eligible countries</label>
-            <textarea
-              rows={3}
-              value={form.eligibleCountries}
-              onChange={(event) => updateField("eligibleCountries", event.target.value)}
-              className={textareaClassName}
-              placeholder={"Bangladesh\nIndia\nNepal"}
-            />
-          </div>
-
-          <div className="md:col-span-2 lg:col-span-4">
-            <label className={labelClassName}>Eligible nationalities</label>
-            <textarea
-              rows={3}
-              value={form.eligibleNationalities}
-              onChange={(event) => updateField("eligibleNationalities", event.target.value)}
-              className={textareaClassName}
-              placeholder="Leave empty when there is no nationality restriction."
-            />
-          </div>
-        </div>
-      </Section>
-
-      <Section title="Application preparation">
-        <div className="grid gap-5 md:grid-cols-2">
-          {[
-            ["requirements", "Requirements", "Relevant degree\nMinimum academic result"],
-            ["requiredDocuments", "Required documents", "Transcript\nCV\nStatement of purpose"],
-            ["benefits", "Benefits", "Tuition support\nMonthly stipend"],
-            ["applicationSteps", "Application steps", "Create an account\nUpload documents\nSubmit application"],
-          ].map(([field, label, placeholder]) => (
-            <div key={field}>
-              <label className={labelClassName}>{label}</label>
-              <textarea
-                rows={6}
-                value={form[field]}
-                onChange={(event) => updateField(field, event.target.value)}
-                className={textareaClassName}
-                placeholder={placeholder}
-              />
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section
-        title="Opportunity images"
-        description="Upload one cover image and up to five gallery images. Existing gallery images can be removed before saving."
-      >
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div>
-            <label className={labelClassName}>Cover image</label>
-            <label className="flex min-h-44 cursor-pointer flex-col items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-center">
-              {coverPreview ? (
-                <img src={coverPreview} alt="Cover preview" className="h-56 w-full object-cover" />
-              ) : (
-                <>
-                  <UploadCloud className="h-7 w-7 text-indigo-600" />
-                  <span className="mt-2 text-sm font-semibold text-slate-700">
-                    Choose a cover image
-                  </span>
-                </>
-              )}
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                onChange={(event) => setCoverFile(event.target.files?.[0] || null)}
-                className="sr-only"
-              />
-            </label>
-          </div>
-
-          <div>
-            <label className={labelClassName}>Gallery images</label>
-            <label className="flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 text-center">
-              <ImagePlus className="h-7 w-7 text-indigo-600" />
-              <span className="mt-2 text-sm font-semibold text-slate-700">
-                Select gallery images
-              </span>
-              <span className="mt-1 text-xs text-slate-500">
-                {savedGallery.length + galleryFiles.length}/5 selected images
-              </span>
-              <input
-                type="file"
-                multiple
-                accept="image/jpeg,image/png,image/webp"
-                onChange={handleGallerySelection}
-                className="sr-only"
-              />
-            </label>
-
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              {savedGallery.map((asset) => (
-                <div key={asset.url} className="relative overflow-hidden rounded-xl border">
-                  <img src={asset.url} alt="Saved gallery" className="h-24 w-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setSavedGallery((current) =>
-                        current.filter((item) => item.url !== asset.url)
+                  <select
+                    value={draftFilters.category}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "category",
+                        event.target.value,
                       )
                     }
-                    className="absolute right-1 top-1 rounded-lg bg-white/95 p-1 text-red-600 shadow"
-                    aria-label="Remove saved image"
+                    className={inputClassName}
                   >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
+                    <option value="">
+                      All categories
+                    </option>
 
-              {galleryPreviews.map((asset, index) => (
-                <div key={asset.url} className="relative overflow-hidden rounded-xl border">
-                  <img
-                    src={asset.url}
-                    alt="New gallery preview"
-                    className="h-24 w-full object-cover"
+                    {opportunityCategories.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Education level
+                  </label>
+
+                  <select
+                    value={draftFilters.educationLevel}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "educationLevel",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                  >
+                    <option value="">
+                      All education levels
+                    </option>
+
+                    {educationLevels.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Funding type
+                  </label>
+
+                  <select
+                    value={draftFilters.fundingType}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "fundingType",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                  >
+                    <option value="">
+                      All funding types
+                    </option>
+
+                    {fundingTypes.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Eligible country
+                  </label>
+
+                  <input
+                    list="opportunity-countries"
+                    value={draftFilters.country}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "country",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                    placeholder="Example: Bangladesh"
                   />
-                  <button
-                    type="button"
-                    onClick={() => removeNewGalleryFile(index)}
-                    className="absolute right-1 top-1 rounded-lg bg-white/95 p-1 text-red-600 shadow"
-                    aria-label="Remove selected image"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+
+                  <datalist id="opportunity-countries">
+                    {(options.countries || []).map(
+                      (country) => (
+                        <option
+                          key={country}
+                          value={country}
+                        />
+                      ),
+                    )}
+                  </datalist>
                 </div>
-              ))}
+
+                <div>
+                  <label className={labelClassName}>
+                    Eligible nationality
+                  </label>
+
+                  <input
+                    list="opportunity-nationalities"
+                    value={draftFilters.nationality}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "nationality",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                    placeholder="Example: Bangladeshi"
+                  />
+
+                  <datalist id="opportunity-nationalities">
+                    {(options.nationalities || []).map(
+                      (nationality) => (
+                        <option
+                          key={nationality}
+                          value={nationality}
+                        />
+                      ),
+                    )}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Field of study
+                  </label>
+
+                  <input
+                    list="opportunity-fields"
+                    value={draftFilters.fieldOfStudy}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "fieldOfStudy",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                    placeholder="Example: Computer Science"
+                  />
+
+                  <datalist id="opportunity-fields">
+                    {(options.fieldsOfStudy || []).map(
+                      (field) => (
+                        <option
+                          key={field}
+                          value={field}
+                        />
+                      ),
+                    )}
+                  </datalist>
+                </div>
+
+                <div>
+                  <label className={labelClassName}>
+                    Deadline before
+                  </label>
+
+                  <input
+                    type="date"
+                    value={draftFilters.deadlineTo}
+                    onChange={(event) =>
+                      updateDraftFilter(
+                        "deadlineTo",
+                        event.target.value,
+                      )
+                    }
+                    className={inputClassName}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClassName}>
+                      Min funding
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={draftFilters.minFunding}
+                      onChange={(event) =>
+                        updateDraftFilter(
+                          "minFunding",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="0"
+                      className={inputClassName}
+                    />
+                  </div>
+
+                  <div>
+                    <label className={labelClassName}>
+                      Max funding
+                    </label>
+
+                    <input
+                      type="number"
+                      min="0"
+                      value={draftFilters.maxFunding}
+                      onChange={(event) =>
+                        updateDraftFilter(
+                          "maxFunding",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="Any"
+                      className={inputClassName}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="mt-6 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-5 text-sm font-bold text-white shadow-lg shadow-indigo-100 transition hover:-translate-y-0.5 hover:shadow-xl"
+              >
+                <Search className="h-4 w-4" />
+                Apply filters
+              </button>
+            </form>
+          </aside>
+
+          {/* Results */}
+          <section className="min-w-0">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-bold text-slate-950">
+                    {loading
+                      ? "Finding opportunities..."
+                      : `${meta.total || 0} opportunities found`}
+                  </p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    {meta.page
+                      ? `Page ${meta.page} of ${meta.totalPages}`
+                      : "Results matching your current preferences"}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {activeFilterCount > 0 ? (
+                    <span className="rounded-full bg-indigo-50 px-3 py-2 text-xs font-bold text-indigo-700">
+                      {activeFilterCount} active{" "}
+                      {activeFilterCount === 1
+                        ? "filter"
+                        : "filters"}
+                    </span>
+                  ) : null}
+
+                  <label className="flex items-center gap-2">
+                    <span className="hidden text-xs font-bold uppercase tracking-wide text-slate-500 sm:inline">
+                      Sort
+                    </span>
+
+                    <select
+                      value={appliedFilters.sort}
+                      onChange={(event) =>
+                        changeSort(event.target.value)
+                      }
+                      className="min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 outline-none transition focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100"
+                    >
+                      {opportunitySortOptions.map((item) => (
+                        <option
+                          key={item.value}
+                          value={item.value}
+                        >
+                          {item.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
+
+            {error ? (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
+                <p className="font-bold">
+                  Opportunities could not be loaded
+                </p>
+
+                <p className="mt-1">{error}</p>
+              </div>
+            ) : null}
+
+            {loading ? (
+              <div className="mt-6 grid items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {Array.from({ length: 8 }).map(
+                  (_, index) => (
+                    <div
+                      key={index}
+                      className="overflow-hidden rounded-3xl border border-slate-200 bg-white"
+                    >
+                      <div className="h-48 animate-pulse bg-slate-200" />
+
+                      <div className="space-y-4 p-5">
+                        <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+                        <div className="h-6 animate-pulse rounded bg-slate-200" />
+                        <div className="h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                        <div className="h-16 animate-pulse rounded bg-slate-100" />
+                        <div className="h-11 animate-pulse rounded-xl bg-slate-200" />
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            ) : null}
+
+            {!loading && !error && data.length === 0 ? (
+              <div className="mt-6 rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+                <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700">
+                  <Search className="h-6 w-6" />
+                </span>
+
+                <h2 className="mt-5 text-xl font-bold text-slate-950">
+                  No matching opportunities
+                </h2>
+
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
+                  Try changing your country, education,
+                  funding or deadline filters to discover more
+                  results.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-sm font-bold text-white hover:bg-indigo-700"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset filters
+                </button>
+              </div>
+            ) : null}
+
+            {!loading && data.length > 0 ? (
+              <div className="mt-6 grid items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {data.map((opportunity) => (
+                  <OpportunityCard
+                    key={opportunity._id}
+                    opportunity={opportunity}
+                  />
+                ))}
+              </div>
+            ) : null}
+
+            {meta.totalPages > 1 ? (
+              <nav
+                aria-label="Opportunity pagination"
+                className="mt-10 flex flex-wrap items-center justify-center gap-2"
+              >
+                <button
+                  type="button"
+                  disabled={!meta.hasPreviousPage}
+                  onClick={() =>
+                    changePage(meta.page - 1)
+                  }
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">
+                    Previous
+                  </span>
+                </button>
+
+                {paginationItems.map((item) =>
+                  typeof item === "string" ? (
+                    <span
+                      key={item}
+                      className="flex h-10 min-w-8 items-center justify-center text-slate-400"
+                    >
+                      ...
+                    </span>
+                  ) : (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => changePage(item)}
+                      aria-current={
+                        item === meta.page
+                          ? "page"
+                          : undefined
+                      }
+                      className={`h-10 min-w-10 rounded-xl px-3 text-sm font-bold transition ${
+                        item === meta.page
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100"
+                          : "border border-slate-300 bg-white text-slate-700 shadow-sm hover:border-indigo-300 hover:text-indigo-700"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ),
+                )}
+
+                <button
+                  type="button"
+                  disabled={!meta.hasNextPage}
+                  onClick={() =>
+                    changePage(meta.page + 1)
+                  }
+                  className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:border-indigo-300 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <span className="hidden sm:inline">
+                    Next
+                  </span>
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </nav>
+            ) : null}
+          </section>
         </div>
-      </Section>
-
-      <Section title="Official links">
-        <div className="grid gap-5 md:grid-cols-2">
-          <div>
-            <label className={labelClassName}>Official source URL</label>
-            <input
-              required
-              type="url"
-              value={form.officialSourceUrl}
-              onChange={(event) => updateField("officialSourceUrl", event.target.value)}
-              className={inputClassName}
-              placeholder="https://official-provider.org/program"
-            />
-          </div>
-
-          <div>
-            <label className={labelClassName}>Application URL</label>
-            <input
-              required
-              type="url"
-              value={form.applicationUrl}
-              onChange={(event) => updateField("applicationUrl", event.target.value)}
-              className={inputClassName}
-              placeholder="https://official-provider.org/apply"
-            />
-          </div>
-        </div>
-      </Section>
-
-      {statusMessage ? (
-        <div
-          className={`rounded-xl border p-4 text-sm ${
-            statusMessage.toLowerCase().includes("success")
-              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-              : "border-amber-200 bg-amber-50 text-amber-900"
-          }`}
-        >
-          {statusMessage}
-        </div>
-      ) : null}
-
-      <div className="flex justify-end">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 text-sm font-bold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {submitting ? (
-            <LoaderCircle className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          {submitting ? "Saving..." : submitLabel}
-        </button>
       </div>
-    </form>
+    </main>
   );
 }
